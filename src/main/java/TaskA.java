@@ -1,5 +1,4 @@
 import org.json.simple.JSONArray;
-import org.json.simple.JSONAware;
 import org.json.simple.JSONObject;
 import org.json.simple.parser.JSONParser;
 import org.json.simple.parser.ParseException;
@@ -7,7 +6,6 @@ import org.json.simple.parser.ParseException;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
-import java.io.PrintStream;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -20,286 +18,151 @@ public class TaskA {
         JSONArray jsonArray = (JSONArray) parser.parse(reader);
         for (Object o : jsonArray) {
             JSONObject object = (JSONObject) o;
-            OrderEvent event = new OrderEvent();
-            event.setEvent_id((Long) object.get("event_id"));
-            event.setCount((Long) object.get("count"));
-            event.setStatus((String) object.get("status"));
-            event.setOrder_id((Long) object.get("order_id"));
-            event.setReturn_count((Long) object.get("return_count"));
-            event.setItem_id((Long) object.get("item_id"));
-            events.add(event);
+            events.add(new OrderEvent(
+                    Math.toIntExact((Long) object.get("event_id")),
+                    Math.toIntExact((Long) object.get("order_id")),
+                    Math.toIntExact((Long) object.get("item_id")),
+                    Math.toIntExact((Long) object.get("count")),
+                    Math.toIntExact((Long) object.get("return_count")),
+                    (String) object.get("status")));
         }
 
-        List<Order> orders = events.stream().collect(Collectors.groupingBy(OrderEvent::getOrder_id)).entrySet().stream()
+        List<Order> orders = events
+                .stream()
+                .collect(Collectors.groupingBy(OrderEvent::getOrder_id))
+                .entrySet()
+                .stream()
                 .map(m ->
                 {
-                    Order order = new Order();
-                    order.setId(Math.toIntExact(m.getKey()));
-                    //noinspection OptionalGetWithoutIsPresent
-                    String status = m.getValue()
-                            .stream()
-                            .max(Comparator.comparingLong(OrderEvent::getEvent_id))
-                            .get()
-                            .getStatus();
-                    order.setStatus(status);
+                    Order order = new Order(m.getKey());
 
-                    List<OrderItem> items = m.getValue()
+                    List<OrderItem> items = m
+                            .getValue()
                             .stream()
                             .collect(Collectors.groupingBy(OrderEvent::getItem_id))
                             .entrySet()
                             .stream()
                             .map(p -> {
-                                OrderItem orderItem = new OrderItem();
-                                orderItem.setId(p.getKey());
                                 //noinspection OptionalGetWithoutIsPresent
-                                OrderEvent orderEvent = p.getValue().stream().max(Comparator.comparingLong(OrderEvent::getEvent_id)).get();
-                                orderItem.setCount((int) (orderEvent.getCount() - orderEvent.getReturn_count()));
-                                return orderItem;
+                                OrderEvent lastEventOrderItem = p.getValue()
+                                        .stream()
+                                        .max(Comparator.comparingInt(OrderEvent::getEvent_id))
+                                        .get();
+
+                                if (Objects.equals(lastEventOrderItem.getStatus(), "OK")) {
+                                    return new OrderItem(p.getKey(), lastEventOrderItem.getCount() - lastEventOrderItem.getReturn_count());
+                                } else {
+                                    return null;
+                                }
                             })
-                            .filter(f -> f.count > 0)
+                            .filter(f -> f != null && f.getCount() > 0)
                             .collect(Collectors.toList());
 
                     order.getItems().addAll(items);
 
                     return order;
-                }).filter(f -> !Objects.equals(f.status, "CANCEL") && f.getItems().size() > 0)
+                }).filter(f -> f.getItems().size() > 0)
                 .collect(Collectors.toList());
 
         JSONArray outArray = new JSONArray();
         for (Order order : orders) {
             JSONObject object = new JSONObject();
+            //noinspection unchecked
             object.put("id", order.getId());
             JSONArray items = new JSONArray();
             for (OrderItem itemSource : order.getItems()) {
                 JSONObject item = new JSONObject();
+                //noinspection unchecked
                 item.put("id", itemSource.getId());
+                //noinspection unchecked
                 item.put("count", itemSource.getCount());
+                //noinspection unchecked
                 items.add(item);
             }
+            //noinspection unchecked
             object.put("items", items);
+            //noinspection unchecked
             outArray.add(object);
         }
 
-        writeJSONString(outArray, System.out, 0);
+        System.out.println(outArray.toJSONString());
         System.out.println();
     }
 
     public static class OrderEvent {
-        private long event_id;
-        private long order_id;
-        private long item_id;
-        private long count;
-        private long return_count;
-        private String status;
+        private final int event_id;
+        private final int order_id;
+        private final int item_id;
+        private final int count;
+        private final int return_count;
+        private final String status;
 
-        public long getEvent_id() {
-            return event_id;
-        }
-
-        public void setEvent_id(long event_id) {
+        public OrderEvent(int event_id, int order_id, int item_id, int count, int return_count, String status) {
             this.event_id = event_id;
-        }
-
-        public long getOrder_id() {
-            return order_id;
-        }
-
-        public void setOrder_id(long order_id) {
             this.order_id = order_id;
-        }
-
-        public long getItem_id() {
-            return item_id;
-        }
-
-        public void setItem_id(long item_id) {
             this.item_id = item_id;
-        }
-
-        public long getCount() {
-            return count;
-        }
-
-        public void setCount(long count) {
             this.count = count;
-        }
-
-        public long getReturn_count() {
-            return return_count;
-        }
-
-        public void setReturn_count(long return_count) {
             this.return_count = return_count;
+            this.status = status;
+        }
+
+        public int getOrder_id() {
+            return this.order_id;
+        }
+
+        public int getItem_id() {
+            return this.item_id;
+        }
+
+        public int getCount() {
+            return this.count;
+        }
+
+        public int getReturn_count() {
+            return this.return_count;
         }
 
         public String getStatus() {
-            return status;
+            return this.status;
         }
 
-        public void setStatus(String status) {
-            this.status = status;
+        public int getEvent_id() {
+            return this.event_id;
         }
     }
 
     public static class Order {
-        private long id;
-        private String status;
-        private List<OrderItem> items = new ArrayList<>();
+        private final int id;
+        private final List<OrderItem> items = new ArrayList<>();
 
-        public void setStatus(String status) {
-            this.status = status;
+        public Order(int id) {
+            this.id = id;
         }
 
         public List<OrderItem> getItems() {
             return items;
         }
 
-        public long getId() {
+        public int getId() {
             return id;
-        }
-
-        public void setId(long id) {
-            this.id = id;
         }
     }
 
     public static class OrderItem {
-        private Long id;
-        private int count;
+        private final int id;
+        private final int count;
 
-        public Long getId() {
-            return id;
-        }
-
-        public void setId(Long id) {
+        public OrderItem(int id, int count) {
             this.id = id;
+            this.count = count;
         }
 
-        public void setCount(int count) {
-            this.count = count;
+        public int getId() {
+            return id;
         }
 
         public int getCount() {
             return this.count;
         }
-    }
-
-    public static void writeJSONString(List list, PrintStream printStream, int level) throws IOException {
-        if (list == null) {
-            printStream.print("null");
-        } else {
-            boolean first = true;
-            Iterator iter = list.iterator();
-
-            printStream.print('[');
-            level++;
-
-            while (iter.hasNext()) {
-                if (first) {
-                    first = false;
-                } else {
-                    printStream.print(',');
-                }
-
-                Object value = iter.next();
-                if (value == null) {
-                    printStream.print("null");
-                } else {
-                    printStream.println();
-                    writeLevel(level, printStream);
-                    writeJSONString(value, printStream, level);
-                }
-            }
-
-            if (list.size() > 0) {
-                printStream.println();
-            }
-            level--;
-            writeLevel(level, printStream);
-            printStream.print(']');
-        }
-    }
-
-    private static void writeLevel(int level, PrintStream printStream) {
-        for (int i = 0; i < level; i++) {
-            printStream.print("    ");
-        }
-    }
-
-    public static void writeJSONString(Object value, PrintStream printStream, int level) throws IOException {
-        if (value == null) {
-            printStream.print("null");
-        } else if (value instanceof String) {
-            printStream.print("\"" + (String) value + "\"");
-        } else if (value instanceof Double) {
-            printStream.print(!((Double) value).isInfinite() && !((Double) value).isNaN() ? value.toString() : "null");
-        } else if (value instanceof Float) {
-            printStream.print(!((Float) value).isInfinite() && !((Float) value).isNaN() ? value.toString() : "null");
-        } else if (value instanceof Number) {
-            printStream.print(value.toString());
-        } else if (value instanceof Boolean) {
-            printStream.print(value.toString());
-        } else if (value instanceof Map) {
-            writeJSONString((Map) value, printStream, level);
-        } else if (value instanceof JSONAware) {
-            printStream.print(((JSONAware) value).toJSONString());
-        } else {
-            if (value instanceof List)
-            {
-                writeJSONString((List) value, printStream, level);
-            }
-            else {
-                printStream.print(value);
-            }
-        }
-    }
-
-    public static void writeJSONString(Map map, PrintStream printStream, int level) throws IOException {
-        if (map == null) {
-            printStream.print("null");
-        } else {
-            boolean first = true;
-            Iterator iter = map.entrySet().iterator();
-            printStream.print('{');
-            level++;
-
-            while (iter.hasNext()) {
-                if (first) {
-                    first = false;
-                } else {
-                    printStream.print(',');
-                }
-
-                Map.Entry entry = (Map.Entry) iter.next();
-                printStream.println();
-                writeLevel(level, printStream);
-                writeJSONString(String.valueOf(entry.getKey()), entry.getValue(), printStream, level);
-            }
-
-            printStream.println();
-            level--;
-            writeLevel(level, printStream);
-            printStream.print('}');
-        }
-    }
-
-    private static void writeJSONString(String key, Object value, PrintStream printStream, int level) throws IOException {
-        printStream.print('"');
-        if (key == null) {
-            printStream.print("null");
-        } else {
-            printStream.print(key);
-        }
-
-        printStream.print('"');
-        printStream.print(':');
-        printStream.print(' ');
-
-        if (value instanceof JSONArray) {
-            writeJSONString((JSONArray) value, printStream, level);
-        } else {
-            writeJSONString(value, printStream, level);
-        }
-
     }
 }
